@@ -21,7 +21,7 @@ buildPackage <- function(
 	# Hard coded list of Holmin packages ordered by increasing dependency:
 	pckDep <- c("TSD","SimradRaw","sonR","echoIBM","cpplot3d")
 	
-	getImports <- function(dir){
+	getImports <- function(dir, pckDep){
 		# Read the NAMESPACE file and get the package dependencies:
 		dirList <- list.files(dir, recursive=TRUE, full.names=TRUE)
 		imports <- NULL
@@ -38,11 +38,22 @@ buildPackage <- function(
 			#notBase <- inst[, "Package"][!(inst[,"Priority"]) %in% "base"]
 			#imports <- sort(imports[!imports %in% notBase])
 		}
-		imports
+		
+		CRAN <- sort(setdiff(imports, pckDep))
+		GitHub <- intersect(imports, pckDep)
+		GitHub <- GitHub[order(match(GitHub, pckDep))]
+		notInstalledCRAN <- setdiff(CRAN, installed.packages()[,"Package"])
+		imports <- list(CRAN=CRAN, GitHub=GitHub, notInstalledCRAN=notInstalledCRAN)
+		
+		return(imports)
+	}
+	
+	getPckDir <- function(dir, pkgName){
+		file.path(dir, pkgName, pkgName)
 	}
 
 	# Directories:
-	pckDir <- file.path(dir, pkgName, pkgName)
+	pckDir <- getPckDir(dir, pkgName)
 	if(backup){
 		backupDir <- file.path(dir, "Backup")
 		tempBackupDir <- file.path(backupDir, pkgName)
@@ -52,8 +63,8 @@ buildPackage <- function(
 		file.rename(tempBackupDir, thisBackupDir)
 	}
 	manDir <- file.path(pckDir, "man")
-	pckAll <- unique(c(pkgName, pckDep))
-	cppDir <- file.path(dir, pckAll, pckAll, "src")
+	allPck <- unique(c(pkgName, pckDep))
+	cppDir <- file.path(dir, allPck, allPck, "src")
 	exportDir <- file.path(dirname(pckDir), "bundle")
 	thisExportDir <- file.path(exportDir, paste(pkgName, version, sep="_"))
 	bugReports <- paste0("https://github.com/arnejohannesholmin/", pkgName, "/issues")
@@ -131,25 +142,31 @@ buildPackage <- function(
 		
 		# Also remove the shared objects from the src directory:
 		sharedObjects <- list.files(cppDir, pattern = "\\.o|so$", full.names=TRUE)
-		print("sharedObjects")
-		print(sharedObjects)
 		unlink(sharedObjects, recursive=TRUE, force=TRUE)
 	}
 	
 	# Alter the DESCRIPTION file to contain the imports listed in the NAMESPACE file:
+	# Get first the imports of the package 'pkgName':
+	imports <- getImports(pckDir, pckDep)
+	allGitHubPck <- c(imports$GitHub, pkgName)
+	# Then get the imports of the dependent packages:
+	imports <- lapply(getPckDir(dir, allGitHubPck), getImports, pckDep= pckDep)
+	names(imports) <- allGitHubPck
+	allCRANimports <- sort(unique(unlist(lapply(imports, "[[", "CRAN"))))
+	
 	#imports <- lapply(pkgName, function(xx) getImports(file.path(dir, xx)))
-	imports <- getImports(pckDir)
+	###imports <- getImports(pckDir, pckDep)
 	#imports <- unique(unlist(imports))
-	CRAN <- sort(setdiff(imports, pckDep))
-	GitHub <- intersect(imports, pckDep)
-	GitHub <- GitHub[order(match(GitHub, pckDep))]
-	notInstalledCRAN <- setdiff(CRAN, installed.packages()[,"Package"])
-	imports <- list(CRAN=CRAN, GitHub=GitHub, notInstalledCRAN=notInstalledCRAN)
+	### CRAN <- sort(setdiff(imports, pckDep))
+	### GitHub <- intersect(imports, pckDep)
+	### GitHub <- GitHub[order(match(GitHub, pckDep))]
+	### notInstalledCRAN <- setdiff(CRAN, installed.packages()[,"Package"])
+	### imports <- list(CRAN=CRAN, GitHub=GitHub, notInstalledCRAN=notInstalledCRAN)
 	
 	DESCRIPTIONtext <- readLines(DESCRIPTIONfile)
-	if(length(imports)){
+	if(length(imports[[pkgName]])){
 		cat("Imports:\n		", file=DESCRIPTIONfile, append=TRUE)
-		cat(paste(unlist(imports), collapse=",\n		"), file=DESCRIPTIONfile, append=TRUE)
+		cat(paste(unlist(imports[[pkgName]]), collapse=",\n		"), file=DESCRIPTIONfile, append=TRUE)
 	}
 	##########
 	
@@ -165,27 +182,6 @@ buildPackage <- function(
 	suppressWarnings(dir.create(thisExportDir, recursive=TRUE))
 	pkgFileVer <- build(pckDir, path=thisExportDir)
 	
-	##### Write README file: #####
-	### READMEtext <- c(
-	### 	paste0("# Installation instructions for the package ", pkgName, "(", format(Sys.time(), "%Y-%m-%d"), ")"), 
-	### 	paste0("# R version: ", Rversion), 
-	### 	paste0("# Install the packages that ", pkgName, " depends on. Note that this updates all the specified packages to the latest (binary) version:"),
-	### 	paste0("dep.pck <- c(\"", paste0(imports$CRAN, collapse="\", \""), "\")"),
-	### 	"install.packages(dep.pck, repos=\"http://cran.us.r-project.org\")",
-	### 	"",
-	### 	paste0("# Install ", pkgName, " and also the packages that ", pkgName, " depends on which are on GitHub (by Holmin):"),
-	### 	if(any(cpp)) "# On Windows you will need Rtools to complete the installations. Check if you have this by running Sys.getenv('PATH'), and go to https://cran.r-project.org/bin/windows/Rtools/ to install Rtools if not.",
-	### 	"",
-	### 	paste0("dep.pck.git <- c(\"", paste0("arnejohannesholmin/", c(imports$GitHub, pkgName), collapse="\", \""), "\")"),
-	### 	"install_github(dep.pck.git)",
-	### 	"", 
-	### 	paste0("# For changes log see ", "https://github.com/arnejohannesholmin/", pkgName, "/NEWS"),
-	### 	"", 
-	### 	paste0("# Examples:"),
-	### 	"", 
-	### 	readLines(examplesfile), 
-	### 	"")
-	# Clean any existing READMEfile:
 	
 	dependencytext <- function(x, pkgName){
 		if(length(x)){
@@ -195,8 +191,6 @@ buildPackage <- function(
 			""
 		}
 	}
-	print(dependencytext(imports$CRAN, pkgName=pkgName))
-	print(dependencytext(imports$notInstalledCRAN, pkgName=pkgName))
 
 	READMEtext <- c(
 		paste(pkgName, "R package"),
@@ -211,12 +205,13 @@ buildPackage <- function(
 		"=====",
 		"",
 		"``` r",
-		if(length(imports$CRAN)) dependencytext(imports$CRAN, pkgName=pkgName), 
+		if(length(allCRANimports)) dependencytext(allCRANimports, pkgName=pkgName), 
 		"",
 		paste0("# Install ", pkgName, " and also the packages that ", pkgName, " depends on which are on GitHub (by Holmin):"),
 		if(any(cpp)) "# On Windows you will need Rtools to complete the installations. Check if you have this by running Sys.getenv('PATH'), and go to https://cran.r-project.org/bin/windows/Rtools/ to install Rtools if not.",
 		"",
-		paste0("dep.pck.git <- c(\"", paste0("arnejohannesholmin/", c(imports$GitHub, pkgName), collapse="\", \""), "\")"),
+		paste0("dep.pck.git <- c(\"", paste0("arnejohannesholmin/", c(imports[[pkgName]]$GitHub, pkgName), collapse="\", \""), "\")"),
+		"# If you want to install the lastest development versions, run devtools::install_github(dep.pck.git, ref=\"develop\") instead:", 
 		"devtools::install_github(dep.pck.git)",
 		"",
 		"```",
@@ -250,7 +245,7 @@ buildPackage <- function(
 	
 	
 	##### Install local source package by utils (independent of dev-tools), and check that it loads: #####
-	eval(parse(text=dependencytext(imports$notInstalledCRAN, pkgName=pkgName)))
+	eval(parse(text=dependencytext(imports[[pkgName]]$notInstalledCRAN, pkgName=pkgName)))
 	install.packages(pkgFileVer, repos=NULL, type="source", lib=.libPaths()[1])
 	library(pkgName, character.only=TRUE)
 	if(pkgName=="sonR"){
