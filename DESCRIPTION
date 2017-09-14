@@ -1,0 +1,23 @@
+Package: AJ
+Title: Holmins functions, used also for loading all packages by library(AJ)
+Version: 1.1
+Authors@R: c(
+  person("Arne Johannes", "Holmin", role = c("aut","cre"), email = "arnejh@imr.no"))
+Author: Arne Johannes Holmin [aut, cre],
+Maintainer: Arne Johannes Holmin <arnejh@imr.no>
+Description: All functions private to Holmin (not suited or intended for sharing with others) are included in this package, which is an extension of the previous package HolminUtils
+Depends: R (>= 3.3.3), TSD, SimradRaw, sonR, echoIBM, cpplot3d
+BugReports: https://github.com/arnejohannesholmin/AJ/issues
+License: LGPL-3
+LazyData: true
+RoxygenNote: 6.0.1
+Imports:
+		fBasics,
+		fields,
+		gdata,
+		rgl,
+		TSD,
+		SimradRaw,
+		sonR,
+		echoIBM,
+		cpplot3d
